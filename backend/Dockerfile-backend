@@ -2,14 +2,13 @@ FROM golang:latest
 
 WORKDIR backend/cmd
 
-COPY go.mod go.sum ./
+COPY ../go.mod go.sum ./
 RUN go mod download
 
-# Build the app
 COPY / ./
 RUN go build -o main backend/cmd/main.go
 
-COPY frontend/html /frontend/html
+COPY ../frontend/html /frontend/html
 
 EXPOSE 8081
 

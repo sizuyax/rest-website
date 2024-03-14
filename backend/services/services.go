@@ -54,10 +54,10 @@ func PostRegistrationPage(c echo.Context) error {
 	}
 
 	if isUserExists {
-
 		return c.Redirect(http.StatusMovedPermanently, "/registration")
+	}
 
-	} else {
+	if !isUserExists {
 
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {
@@ -69,9 +69,9 @@ func PostRegistrationPage(c echo.Context) error {
 			logrus.Error(err)
 			return err
 		}
-
-		return c.Redirect(http.StatusMovedPermanently, "/")
 	}
+
+	return c.Redirect(http.StatusMovedPermanently, "/")
 }
 
 func GetHomePage(c echo.Context) error {
@@ -129,6 +129,7 @@ func PostHomePage(c echo.Context) error {
 		}
 
 		return c.Redirect(http.StatusMovedPermanently, "/home")
+
 	} else {
 
 		alertMessage := "Неверное имя пользователя или пароль."
