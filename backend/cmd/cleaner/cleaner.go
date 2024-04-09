@@ -1,24 +1,24 @@
 package cleaner
 
 import (
-	"github.com/jmoiron/sqlx"
-	"github.com/sirupsen/logrus"
+	"simple/backend/database/postgres"
+	"simple/backend/logger"
 	"time"
 )
 
-func Cleaner(db *sqlx.DB) error {
+func CleanPostgres() error {
 
-	logrus.Info("Cleaning up the database...")
+	logger.Logger.Debug("cleaning database...")
 
 	//threshold := time.Now().AddDate(0, 0, -7)
 	threshold := time.Now().Add(-2 * time.Minute)
 
-	if _, err := db.Exec(`DELETE FROM todo_list WHERE created_at < $1`, threshold); err != nil {
-		logrus.Error(err)
+	if _, err := postgres.DB.Exec(`DELETE FROM todo_list WHERE created_at < $1`, threshold); err != nil {
+		logger.Logger.Error(err)
 		return err
 	}
 
-	logrus.Info("Database cleaned up!\n\n")
+	logger.Logger.Debug("database cleaned up!\n\n")
 
 	time.Sleep(2 * time.Minute)
 

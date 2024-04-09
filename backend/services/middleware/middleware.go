@@ -1,13 +1,12 @@
-package services
+package middleware
 
 import (
 	"crypto/rand"
 	"encoding/base64"
 	"github.com/labstack/echo/v4"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"simple/backend/database/redis"
-	"time"
+	"simple/backend/logger"
 )
 
 func IsAuthenticated(next echo.HandlerFunc) echo.HandlerFunc {
@@ -31,21 +30,9 @@ func GenerateSessionID() (string, error) {
 	token := make([]byte, 32)
 
 	if _, err := rand.Read(token); err != nil {
-		logrus.Error(err)
+		logger.Logger.Error(err)
 		return "", err
 	}
 
 	return base64.URLEncoding.EncodeToString(token), nil
-}
-
-func StartSession(sessionID string, duration time.Duration) error {
-
-	expirationSeconds := duration.Hours()
-
-	if err := redis.Client.Set(sessionID, "active", time.Duration(expirationSeconds)*time.Hour).Err(); err != nil {
-		logrus.Error(err)
-		return err
-	}
-
-	return nil
 }

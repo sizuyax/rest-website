@@ -3,8 +3,8 @@ package redis
 import (
 	"fmt"
 	"github.com/go-redis/redis"
-	"github.com/sirupsen/logrus"
 	"simple/backend/config"
+	"simple/backend/logger"
 )
 
 var Client *redis.Client
@@ -19,11 +19,11 @@ func InitRedis(cfg config.Config) error {
 	})
 
 	if _, err := Client.Ping().Result(); err != nil {
-		logrus.Error("error to connect redis", err)
+		logger.Logger.Error("error to connect redis", err)
 		return err
 	}
 
-	logrus.Info("Successfully connected to redis.")
+	logger.Logger.Debug("successfully connected to redis!\n\n")
 
 	return nil
 }

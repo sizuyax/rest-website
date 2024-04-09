@@ -1,226 +1,193 @@
 package services
 
 import (
-	"fmt"
-	"github.com/labstack/echo/v4"
+	"bytes"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
-	"net/http"
-	"os"
-	"simple/backend/config"
-	"simple/backend/database/postgres"
-	"simple/backend/database/redis"
-	"simple/backend/repository/todolist"
-	"simple/backend/repository/users"
-	"time"
+	"html/template"
+	"simple/backend/logger"
+	"simple/backend/models"
+	"simple/backend/repository/postgres/todolist"
+	"simple/backend/repository/postgres/users"
+	"simple/backend/repository/redis/cookie"
+	"simple/backend/services/middleware"
 )
 
-var (
-	username   string
-	task       config.Task
-	updateTask config.TaskToUpdate
-)
+func RegisterUserIfNotExists(user *models.User) (bool, error) {
 
-func GetLoginPage(c echo.Context) error {
+	logger.Logger.Debugf("Registration Page form values [username]: %s, [hashed password from js]: %s", user.Username, user.Password)
 
-	content, err := os.ReadFile("frontend/html/index.html")
+	isUserExists, err := users.IsUserExists(user.Username)
 	if err != nil {
-		logrus.Error(err)
-		return err
-	}
-
-	return c.HTML(http.StatusOK, string(content))
-}
-
-func GetRegisterPage(c echo.Context) error {
-
-	content, err := os.ReadFile("frontend/html/registration.html")
-	if err != nil {
-		logrus.Error(err)
-		return err
-	}
-
-	return c.HTML(http.StatusOK, string(content))
-}
-func PostRegistrationPage(c echo.Context) error {
-
-	username = c.FormValue("username")
-	password := c.FormValue("password")
-
-	isUserExists, err := users.IsUserExists(postgres.DB, username)
-	if err != nil {
-		logrus.Error(err)
-		return err
+		logger.Logger.Error(err)
+		return false, err
 	}
 
 	if isUserExists {
-		return c.Redirect(http.StatusMovedPermanently, "/registration")
+		logger.Logger.Debugf("[username]: %s, exists in the registration page, redirect back to registration page\n\n", user.Username)
+		return true, nil
 	}
 
 	if !isUserExists {
 
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		logger.Logger.Debug("change hashed password from js to hashed password from go..")
+
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 		if err != nil {
-			logrus.Error(err)
-			return err
+			logger.Logger.Error(err)
+			return false, err
 		}
 
-		if err = users.AddUser(postgres.DB, username, string(hashedPassword)); err != nil {
-			logrus.Error(err)
-			return err
+		logger.Logger.Debug("password hash generated successfully")
+
+		if err := users.AddUser(user.Username, string(hashedPassword)); err != nil {
+			logger.Logger.Error(err)
+			return false, err
 		}
+
+		logger.Logger.Debugf("new [username]: %s was added successfully to database, [new hashed password from go]: %s\n\n", user.Username, hashedPassword)
 	}
 
-	return c.Redirect(http.StatusMovedPermanently, "/")
+	logger.Logger.Info("new user was added successfully to database\n\n")
+
+	return false, err
 }
 
-func GetHomePage(c echo.Context) error {
+func GenerateHTMLTasksList(user *models.User) (string, error) {
 
-	tasks, err := todolist.GetTasks(username, postgres.DB)
+	logger.Logger.Debug("getting tasks...")
+
+	tasks, err := todolist.GetTasks(user.Username)
 	if err != nil {
-		logrus.Error(err)
-		return err
+		logger.Logger.Error(err)
+		return "", err
 	}
 
-	htmlResponse, err := todolist.PutTasksInHTML(tasks)
+	tmpl, err := template.ParseFiles("frontend/html/todo.html")
 	if err != nil {
-		logrus.Error(err)
-		return err
+		logger.Logger.Error(err)
+		return "", err
 	}
 
-	return c.HTML(http.StatusOK, string(htmlResponse))
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, tasks); err != nil {
+		logger.Logger.Error(err)
+		return "", err
+	}
+
+	logger.Logger.Debug("tasks received!\n\n")
+
+	return string(buf.Bytes()), nil
 }
-func PostHomePage(c echo.Context) error {
 
-	username = c.FormValue("username")
-	password := c.FormValue("password")
+func AuthenticateUser(user *models.User) (string, error) {
 
-	isUserExists, err := users.IsUserExists(postgres.DB, username)
+	isUserExists, err := users.IsUserExists(user.Username)
 	if err != nil {
-		logrus.Error(err)
-		return err
+		logger.Logger.Error(err)
+		return "", err
 	}
 
-	hashedPassword, err := users.GetHashedPassword(postgres.DB, username)
+	hashedPassword, err := users.GetHashedPassword(user.Username)
 	if err != nil {
-		logrus.Error(err)
-		return err
+		logger.Logger.Error(err)
+		return "", err
 	}
 
-	if err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password)); err == nil && isUserExists == true {
+	logger.Logger.Debugf("Home Page form values [username]: %s, [hashed password from go]: %s", user.Username, hashedPassword)
 
-		userID, err := GenerateSessionID()
+	if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(user.Password)); err == nil && isUserExists == true {
+
+		logger.Logger.Debug("username and password was compared")
+
+		userID, err := middleware.GenerateSessionID()
 		if err != nil {
-			logrus.Error(err)
-			return err
+			logger.Logger.Error(err)
+			return "", err
 		}
 
-		userID = "session: " + userID
-
-		c.SetCookie(&http.Cookie{
-			Name:    "session",
-			Value:   userID,
-			Expires: time.Now().Add(1 * time.Hour),
-		})
-
-		if err = StartSession(userID, 1); err != nil {
-			logrus.Error(err)
-			return err
+		if err := cookie.SetCookieSession(userID, 1); err != nil {
+			logger.Logger.Error(err)
+			return "", err
 		}
 
-		return c.Redirect(http.StatusMovedPermanently, "/home")
+		logger.Logger.Debug("session and cookie was created, redirect to home page\n\n")
+
+		return userID, nil
 
 	} else {
 
-		alertMessage := "Неверное имя пользователя или пароль."
+		logger.Logger.Debugf("incorrect username or password from [user]: %s\n\n", user.Username)
 
-		return c.HTML(http.StatusOK, fmt.Sprintf(`<script>alert("%s"); window.location="/";</script>`, alertMessage))
+		return "Неверное имя пользователя или пароль.", nil
 	}
 }
 
-func PostCheckUser(c echo.Context) error {
+func VerifyUserExistence(username, hashedPassword string) (bool, error) {
 
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
+	logger.Logger.Debugf("request body post check user, [username]: %v, [hashed password from js]: %s", username, hashedPassword)
 
-	if err := c.Bind(&req); err != nil {
-		logrus.Error(err)
-		return err
-	}
-
-	existsUser, err := users.IsUserExists(postgres.DB, req.Username)
+	existsUser, err := users.IsUserExists(username)
 	if err != nil {
-		logrus.Error(err)
-		return err
+		logger.Logger.Error(err)
+		return false, err
 	}
 
-	return c.JSON(http.StatusOK, config.UserExistsResponse{Exists: existsUser})
+	logger.Logger.Debugf("return username exists: %v\n\n", existsUser)
+
+	return existsUser, nil
 }
 
-func GetLogout(c echo.Context) error {
+func DeleteCookie(username, sessionID string) error {
 
-	sessionID, err := c.Cookie("session")
-	if err != nil {
-		return c.Redirect(http.StatusMovedPermanently, "/")
+	logger.Logger.Debugf("deleting [cookie]: %v, from db and website for [user]: %s..\n\n", sessionID, username)
+
+	if err := cookie.DeleteCookieFromRedis(sessionID); err != nil {
+		logger.Logger.Error(err)
+		return err
 	}
 
-	if err = redis.Client.Del(sessionID.Value).Err(); err != nil {
-		logrus.Error(err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Ошибка сервера"})
-	}
-
-	c.SetCookie(&http.Cookie{
-		Name:   "session",
-		Value:  "",
-		MaxAge: -1,
-	})
-
-	return c.Redirect(http.StatusMovedPermanently, "/")
+	return nil
 }
 
-func PostAddTask(c echo.Context) error {
+func AddTask(user *models.User, task *models.Task) error {
 
-	if err := c.Bind(&task); err != nil {
-		logrus.Error(err)
+	logger.Logger.Debugf("adding [task]: %s, for [username]: %s..", task.Task, user.Username)
+
+	if err := todolist.AddTask(task.Task, user.Username); err != nil {
+		logger.Logger.Error(err)
 		return err
 	}
 
-	if err := todolist.AddTask(task.Task, username, postgres.DB); err != nil {
-		logrus.Error(err)
-		return err
-	}
+	logger.Logger.Debug("task was added\n\n")
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Task added successfully"})
+	return nil
 }
 
-func PutUpdateTask(c echo.Context) error {
+func UpdateTask(user *models.User, updateTask *models.TaskToUpdate) error {
 
-	if err := c.Bind(&updateTask); err != nil {
-		logrus.Error(err)
+	logger.Logger.Debugf("updating task [old task]: %s, [new task]: %s, for [username]: %s..", updateTask.OldTask, updateTask.NewTask, user.Username)
+
+	if err := todolist.UpdateTask(updateTask.OldTask, updateTask.NewTask, user.Username); err != nil {
+		logger.Logger.Error(err)
 		return err
 	}
 
-	if err := todolist.UpdateTask(updateTask.OldTask, updateTask.NewTask, username, postgres.DB); err != nil {
-		logrus.Error(err)
-		return err
-	}
+	logger.Logger.Debug("task was updated\n\n")
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Task updated successfully"})
+	return nil
 }
 
-func DeleteTask(c echo.Context) error {
+func DeleteTask(user *models.User, task *models.Task) error {
 
-	if err := c.Bind(&task); err != nil {
+	logger.Logger.Debugf("deleting [task]: %s, for [username]: %s..", task.Task, user.Username)
+
+	if err := todolist.DeleteTask(task); err != nil {
 		logrus.Error(err)
 		return err
 	}
 
-	if err := todolist.DeleteTask(&task, postgres.DB); err != nil {
-		logrus.Error(err)
-		return err
-	}
+	logger.Logger.Debug("task was deleted\n\n")
 
-	return c.JSON(http.StatusOK, map[string]string{"message": "Task deleted successfully"})
+	return nil
 }

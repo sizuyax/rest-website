@@ -102,8 +102,11 @@
                 return false; // Отмена отправки формы
             }
 
-            // Хешируем пароль перед отправкой на сервер
+            console.log(password)
+
             var hashedPassword = sha256(password);
+
+            console.log(hashedPassword)
 
             checkUserExistence(username, hashedPassword);
 
@@ -116,7 +119,7 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({username: username, password: hashedPassword}),
+                body: JSON.stringify({username: username, hashedPassword: hashedPassword}),
             })
             .then(response => response.json())
             .then(data => {

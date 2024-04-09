@@ -1,29 +1,29 @@
 package postgres
 
 import (
-	"github.com/jmoiron/sqlx"
 	"github.com/pressly/goose"
-	"github.com/sirupsen/logrus"
 	"simple/backend/config"
 	_ "simple/backend/database/postgres/migrations"
+	"simple/backend/logger"
 )
 
-func Migrate(db *sqlx.DB, cfg config.Config) error {
+func MigratePostgres(cfg config.Config) error {
 
 	if cfg.Reload {
 
-		logrus.Info("Reloading database...")
+		logger.Logger.Debug("reloading database...")
 
-		if err := goose.DownTo(db.DB, ".", 0); err != nil {
-			logrus.Fatal(err)
+		if err := goose.DownTo(DB.DB, ".", 0); err != nil {
+			logger.Logger.Error(err)
 			return err
 		}
 	}
 
-	if err := goose.Up(db.DB, "."); err != nil {
-		logrus.Fatal(err)
-		return err
+	if err := goose.Up(DB.DB, "."); err != nil {
+		logger.Logger.Fatal(err)
 	}
+
+	logger.Logger.Debug("migrations successfully happened\n\n")
 
 	return nil
 }

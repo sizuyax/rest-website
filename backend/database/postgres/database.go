@@ -4,31 +4,33 @@ import (
 	"fmt"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"github.com/sirupsen/logrus"
 	"simple/backend/config"
+	"simple/backend/logger"
 )
 
 var DB *sqlx.DB
 
-func InitDB(cfg config.Config) error {
+func InitPostgres(cfg config.Config) error {
 	var err error
 	dsn := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s",
 		cfg.PostgresUser,
 		cfg.PostgresPassword,
 		cfg.PostgresHost,
 		cfg.PostgresName,
-		"disable")
+		"disable",
+	)
 
 	DB, err = sqlx.Open("postgres", dsn)
 	if err != nil {
-		logrus.Fatal(err)
+		logger.Logger.Fatal(err)
 	}
 
-	if err = DB.Ping(); err != nil {
-		logrus.Fatal(err)
+	if err := DB.Ping(); err != nil {
+		logger.Logger.Error(err)
+		return err
 	}
 
-	logrus.Info("Successfully connected to the database!\n\n")
+	logger.Logger.Debug("successfully connected to postgres!\n\n")
 
 	return nil
 }

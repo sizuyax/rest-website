@@ -63,7 +63,7 @@
             {{ end }}
         </ul>
 
-        <button onclick="logout()">Выход</button>
+        <button onclick="logout()">Exit</button>
     </div>
 
     <script>
@@ -226,7 +226,7 @@
 
         function logout() {
             fetch('/logout', {
-                method: 'GET',
+                method: 'POST',
             })
                 .then(response => {
                     if (!response.ok) {

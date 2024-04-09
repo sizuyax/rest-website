@@ -1,12 +1,17 @@
 package main
 
 import (
-	"github.com/sirupsen/logrus"
+	"simple/backend/logger"
 	"simple/backend/server/http"
 )
 
 func main() {
-	if err := http.InitWebServer(); err != nil {
-		logrus.Fatal(err)
+	server, err := http.InitWebServer()
+	if err != nil {
+		logger.Logger.Fatal(err)
+	}
+
+	if err := server.StartServer(); err != nil {
+		logger.Logger.Fatal(err)
 	}
 }

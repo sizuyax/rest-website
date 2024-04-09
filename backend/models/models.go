@@ -1,16 +1,12 @@
-package config
+package models
 
-import "time"
+import (
+	"time"
+)
 
-type Config struct {
-	PostgresUser     string `env:"POSTGRES_USER"`
-	PostgresPassword string `env:"POSTGRES_PASSWORD"`
-	PostgresName     string `env:"POSTGRES_DB"`
-	PostgresHost     string `env:"POSTGRES_HOST"`
-	PostgresPorts    string `env:"POSTGRES_PORTS"`
-	RedisHost        string `env:"REDIS_HOST"`
-	RedisPorts       string `env:"REDIS_PORTS"`
-	Reload           bool   `env:"RELOAD"`
+type User struct {
+	Username string
+	Password string
 }
 
 type Task struct {
